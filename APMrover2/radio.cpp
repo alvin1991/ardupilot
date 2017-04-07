@@ -1,5 +1,4 @@
 #include "Rover.h"
-
 /*
   allow for runtime change of control channel ordering
  */
@@ -64,17 +63,20 @@ void Rover::rudder_arm_disarm_check()
 {
     // In Rover we need to check that its set to the throttle trim and within the DZ
     // if throttle is not within trim dz, then pilot cannot rudder arm/disarm
+	//1检测油门必须在中位死区，否则返回
     if (!channel_throttle->in_trim_dz()) {
         rudder_arm_timer = 0;
         return;
     }
 
     // if not in a manual throttle mode then disallow rudder arming/disarming
+    //2检测必须在手动模式，否则返回
     if (auto_throttle_mode) {
         rudder_arm_timer = 0;
         return;
     }
 
+    //3如果没有解锁.右满舵计时开始超过3秒解锁
     if (!arming.is_armed()) {
         // when not armed, full right rudder starts arming counter
         if (channel_steer->get_control_in() > 4000) {
@@ -94,7 +96,9 @@ void Rover::rudder_arm_disarm_check()
             // not at full right rudder
             rudder_arm_timer = 0;
         }
-    } else if (!motor_active() & !g.skid_steer_out) {
+    }
+    //4如果motor没有运动，并且没有打开滤波优化，舵机左满舵计时开始3秒锁定
+    else if (!motor_active() & !g.skid_steer_out) {
         // when armed and motor not active (not moving), full left rudder starts disarming counter
         // This is disabled for skid steering otherwise when tring to turn a skid steering rover around
         // the rover would disarm
@@ -117,9 +121,16 @@ void Rover::rudder_arm_disarm_check()
         }
     }
 }
-
+/*
+ 1.获取遥控器RC信号
+ 	 1)执行失控保护检测；
+ 	 2)RC信号滤波优化；
+ 	 3)arm/disarm检测；
+ 	 4)辅助通道输出；
+*/
 void Rover::read_radio()
 {
+	//1如果没有新的RC信号，执行失控保护
     if (!hal.rcin->new_input()) {
         control_failsafe(channel_throttle->get_radio_in());
         return;
@@ -131,6 +142,7 @@ void Rover::read_radio()
 
     control_failsafe(channel_throttle->get_radio_in());
 
+    //2处理伺服辅助功能
     SRV_Channels::set_output_scaled(SRV_Channel::k_throttle,channel_throttle->get_control_in());
 
     // Check if the throttle value is above 50% and we need to nudge
@@ -144,6 +156,7 @@ void Rover::read_radio()
         throttle_nudge = 0;
     }
 
+    //3开启舵机平滑
     if (g.skid_steer_in) {
         // convert the two radio_in values from skid steering values
         /*
@@ -173,7 +186,7 @@ void Rover::read_radio()
         channel_steer->set_pwm(steer);
         channel_throttle->set_pwm(thr);
     }
-
+    //4舵机解锁检测
     rudder_arm_disarm_check();
 }
 

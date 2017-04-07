@@ -118,6 +118,7 @@ const AP_Param::GroupInfo AP_SteerController::var_info[] = {
 /*
   steering rate controller. Returns servo out -4500 to 4500 given
   desired yaw rate in degrees/sec. Positive yaw rate means clockwise yaw.
+  根据期望转向速率与ahrs.yaw方向角速率实现PID闭环输出
 */
 int32_t AP_SteerController::get_steering_out_rate(float desired_rate)
 {
@@ -205,6 +206,7 @@ int32_t AP_SteerController::get_steering_out_rate(float desired_rate)
 /*
   lateral acceleration controller. Returns servo value -4500 to 4500
   given a desired lateral acceleration
+  根据地速和横向加速度计算期望速率
 */
 int32_t AP_SteerController::get_steering_out_lat_accel(float desired_accel)
 {
@@ -215,6 +217,7 @@ int32_t AP_SteerController::get_steering_out_lat_accel(float desired_accel)
     }
 
 	// Calculate the desired steering rate given desired_accel and speed
+    //计算出期望角速度（v/r）
     float desired_rate = ToDeg(desired_accel / speed);
     if (_reverse) {
         desired_rate *= -1;

@@ -30,7 +30,7 @@
 */
 
 #include "Rover.h"
-
+//#include <systemlib/err.h>
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 Rover rover;
@@ -43,12 +43,12 @@ Rover rover;
   time they are expected to take (in microseconds)
 */
 const AP_Scheduler::Task Rover::scheduler_tasks[] = {
-    SCHED_TASK(read_radio,             50,   1000),
+    SCHED_TASK(read_radio,             50,   1000),//获取RC遥控信号
     SCHED_TASK(ahrs_update,            50,   6400),
     SCHED_TASK(read_sonars,            50,   2000),
-    SCHED_TASK(update_current_mode,    50,   1500),
+    SCHED_TASK(update_current_mode,    50,   1500),//更新当前模式
     SCHED_TASK(set_servos,             50,   1500),
-    SCHED_TASK(update_GPS_50Hz,        50,   2500),
+    SCHED_TASK(update_GPS_50Hz,        50,   2500),//更新GPS状态
     SCHED_TASK(update_GPS_10Hz,        10,   2500),
     SCHED_TASK(update_alt,             10,   3400),
     SCHED_TASK(navigate,               10,   1600),
@@ -360,6 +360,9 @@ void Rover::one_second_loop(void)
     // indicates that the sensor or subsystem is present but not
     // functioning correctly
     update_sensor_status_flags();
+
+//    warnx("steer   : %d",channel_steer->get_control_in());
+//    warnx("throttle: %d",channel_throttle->get_control_in());
 }
 
 void Rover::dataflash_periodic(void)
@@ -432,14 +435,20 @@ void Rover::update_GPS_10Hz(void)
     }
 }
 
+/*
+2.更新当前控制模式
+ */
 void Rover::update_current_mode(void)
 {
     switch (control_mode){
+    /*
+	AUTO/RTL
+     */
     case AUTO:
     case RTL:
-        calc_lateral_acceleration();
-        calc_nav_steer();
-        calc_throttle(g.speed_cruise);
+        calc_lateral_acceleration();	//计算横向加速度，并推导出角速度
+        calc_nav_steer();				//根据横向加速度计算出角速度，然后与ahrs.yaw的速率闭环计算舵机输出量
+        calc_throttle(g.speed_cruise);	//根据巡航速度和地速闭环油门输出
         break;
 
     case GUIDED: {
@@ -472,7 +481,12 @@ void Rover::update_current_mode(void)
         }
         break;
     }
-
+    /*
+    steering模式是直接控制横向加速度
+	1.计算出舵机全速度下最大横向加速度a=V^2/R;
+	2.油门给定量与巡航速度成比例；
+	3.调用calc_throttle()闭环计算油门输出量；
+     */
     case STEERING: {
         /*
           in steering mode we control lateral acceleration
@@ -481,16 +495,22 @@ void Rover::update_current_mode(void)
           V^2/R where R is the radius of turn. We get the radius of
           turn from half the STEER2SRV_P.
          */
+    	//计算出最大的横向向心加速度
         float max_g_force = ground_speed * ground_speed / steerController.get_turn_radius();
 
         // constrain to user set TURN_MAX_G
+        //将计算出来的横向向心加速度约束到用户设置到的最大加速度值范围[0,g.turn_max_g]
         max_g_force = constrain_float(max_g_force, 0.1f, g.turn_max_g * GRAVITY_MSS);
 
+        //将RC输入安满量程比例转换到[0,max_g_force],并与ahrs.yar的角速率闭环运算
         lateral_acceleration = max_g_force * (channel_steer->get_control_in()/4500.0f);
+        //舵机控制
         calc_nav_steer();
 
         // and throttle gives speed in proportion to cruise speed, up
         // to 50% throttle, then uses nudging above that.
+        //当油门杆位超过50%后，采用nudging来微调油门并转换为速度输出
+        //channel_throttle->get_control_in()[-100,100]
         float target_speed = channel_throttle->get_control_in() * 0.01f * 2 * g.speed_cruise;
         set_reverse(target_speed < 0);
         if (in_reverse) {
@@ -498,10 +518,13 @@ void Rover::update_current_mode(void)
         } else {
             target_speed = constrain_float(target_speed, 0, g.speed_cruise);
         }
+        //电机控制将期望速度（油门杆和巡航速度）与地速闭环
         calc_throttle(target_speed);
         break;
     }
-
+    /*
+    learning/manual模式下，RC直通油门和舵机，辅助通道可以使用
+    */
     case LEARNING:
     case MANUAL:
         /*

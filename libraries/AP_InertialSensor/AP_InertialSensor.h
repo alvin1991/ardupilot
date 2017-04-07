@@ -1,6 +1,6 @@
 #pragma once
 
-// Gyro and Accelerometer calibration criteria
+// Gyro and Accelerometer calibration criteria(加速度计/陀螺仪校准参数)
 #define AP_INERTIAL_SENSOR_ACCEL_TOT_MAX_OFFSET_CHANGE  4.0f
 #define AP_INERTIAL_SENSOR_ACCEL_MAX_OFFSET             250.0f
 #define AP_INERTIAL_SENSOR_ACCEL_CLIP_THRESH_MSS        (15.5f*GRAVITY_MSS) // accelerometer values over 15.5G are recorded as a clipping error
@@ -12,9 +12,9 @@
    maximum number of INS instances available on this platform. If more
    than 1 then redundant sensors may be available
  */
-#define INS_MAX_INSTANCES 3
+#define INS_MAX_INSTANCES 3					//最大支持的惯导实例数
 #define INS_MAX_BACKENDS  6
-#define INS_VIBRATION_CHECK_INSTANCES 2
+#define INS_VIBRATION_CHECK_INSTANCES 2		//震动检测实例数
 
 #include <stdint.h>
 

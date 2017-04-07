@@ -98,10 +98,15 @@ bool Rover::in_stationary_loiter()
 
 /*
     calculate the throtte for auto-throttle modes
+    1计算油门量
+    1)根据巡航速度和油门比例计算目标油门速度；
+    2)通过转向加速度计算减速比例系数，优化目标速度；
+    3)根据地速闭环PID计算出实际油门，通过SRV_Channels::set_output_scaled输出给电机驱动；
 */
 void Rover::calc_throttle(float target_speed) {
     // If not autostarting OR we are loitering at a waypoint
     // then set the throttle to minimum
+	//1如果在自动启动或者在航点loiter的情况下，油门拉到最低；
     if (!auto_check_trigger() || in_stationary_loiter()) {
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, g.throttle_min.get());
         // Stop rotation in case of loitering and skid steering
@@ -111,6 +116,7 @@ void Rover::calc_throttle(float target_speed) {
         return;
     }
 
+    //2计算目标油门，并在转向时按比例降低速度
     float throttle_base = (fabsf(target_speed) / g.speed_cruise) * g.throttle_cruise;
     int throttle_target = throttle_base + throttle_nudge;
 
@@ -178,6 +184,10 @@ void Rover::calc_throttle(float target_speed) {
 
 /*****************************************
     Calculate desired turn angles (in medium freq loop)
+    计算期望转弯角度
+    1)AUTO模式下，判断是否到达目标点，请求导航控制器更新航点；
+    2)RTL/GUIDED/STEERING模式下直接请求导航控制器更新航点；
+    3)导航控制器计算当前所需要的横向加速度；
  *****************************************/
 
 void Rover::calc_lateral_acceleration() {
@@ -202,7 +212,7 @@ void Rover::calc_lateral_acceleration() {
     }
 
     // Calculate the required turn of the wheels
-
+    //导航控制器计算去往下个点时的转向灯需要的横向加速度；
     // negative error = left turn
     // positive error = right turn
     lateral_acceleration = nav_controller->lateral_acceleration();
@@ -218,6 +228,8 @@ void Rover::calc_lateral_acceleration() {
 
 /*
     calculate steering angle given lateral_acceleration
+    根据导航控制器计算出的横向加速度计算出舵机的控制量，通过SRV_Channels::set_output_scaled输出；
+    根据期望转向速率与ahrs.yaw方向角速度实现PID闭环输出
 */
 void Rover::calc_nav_steer() {
     // check to see if the rover is loitering
