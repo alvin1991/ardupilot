@@ -232,21 +232,24 @@ void Rover::calc_lateral_acceleration() {
     根据期望转向速率与ahrs.yaw方向角速度实现PID闭环输出
 */
 void Rover::calc_nav_steer() {
-    // check to see if the rover is loitering
-    if (in_stationary_loiter()) {
-        SRV_Channels::set_output_scaled(SRV_Channel::k_steering, 0);
-        return;
-    }
+//    // check to see if the rover is loitering
+//    if (in_stationary_loiter()) {
+//        SRV_Channels::set_output_scaled(SRV_Channel::k_steering, 0);
+//        return;
+//    }
+//
+//    // add in obstacle avoidance
+//    if (!in_reverse) {
+//        lateral_acceleration += (obstacle.turn_angle/45.0f) * g.turn_max_g;
+//    }
+//
+//    // constrain to max G force
+//    lateral_acceleration = constrain_float(lateral_acceleration, -g.turn_max_g * GRAVITY_MSS, g.turn_max_g * GRAVITY_MSS);
+//
+//    SRV_Channels::set_output_scaled(SRV_Channel::k_steering, steerController.get_steering_out_lat_accel(lateral_acceleration));
+//	SRV_Channels::set_output_scaled(SRV_Channel::k_steering, steerController.get_steering_out_angle_rate(steer_angle_rate));
 
-    // add in obstacle avoidance
-    if (!in_reverse) {
-        lateral_acceleration += (obstacle.turn_angle/45.0f) * g.turn_max_g;
-    }
-
-    // constrain to max G force
-    lateral_acceleration = constrain_float(lateral_acceleration, -g.turn_max_g * GRAVITY_MSS, g.turn_max_g * GRAVITY_MSS);
-
-    SRV_Channels::set_output_scaled(SRV_Channel::k_steering, steerController.get_steering_out_lat_accel(lateral_acceleration));
+	SRV_Channels::set_output_scaled(SRV_Channel::k_steering, steerController.get_steering_out_angle(steer_angle));
 }
 
 /*****************************************
@@ -256,6 +259,7 @@ void Rover::set_servos(void) {
     static uint16_t last_throttle;
     bool apply_skid_mix = true;  // Normaly true, false when the mixage is done by the controler with skid_steer_in = 1
 
+    //如果在手动模式／学习模式下，将RC通道值直接输出到output_pwm，否则将RCin处理过的output_scaled（由control_in直接赋值）
     if (control_mode == MANUAL || control_mode == LEARNING) {
         // do a direct pass through of radio values
         SRV_Channels::set_output_pwm(SRV_Channel::k_steering, channel_steer->read());
@@ -272,7 +276,7 @@ void Rover::set_servos(void) {
             apply_skid_mix = false;
         }
     } else {
-        if (in_reverse) {
+    	if (in_reverse) {
             SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, constrain_int16(SRV_Channels::get_output_scaled(SRV_Channel::k_throttle),
                                           -g.throttle_max,
                                           -g.throttle_min));
@@ -302,10 +306,9 @@ void Rover::set_servos(void) {
         // limit throttle movement speed
         throttle_slew_limit(last_throttle);
     }
-
     // record last throttle before we apply skid steering
-    SRV_Channels::get_output_pwm(SRV_Channel::k_throttle, last_throttle);
-
+    //SRV_Channels::get_output_pwm(SRV_Channel::k_throttle, last_throttle);
+    //舵机平滑处理
     if (g.skid_steer_out) {
         // convert the two radio_out values to skid steering values
         /*
@@ -327,7 +330,7 @@ void Rover::set_servos(void) {
         SRV_Channels::set_output_scaled(SRV_Channel::k_steering, 4500 * motor1);
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle, 100 * motor2);
     }
-
+    //在未解锁的情况下，有些ESC会产生干扰
     if (!arming.is_armed()) {
         // Some ESCs get noisy (beep error msgs) if PWM == 0.
         // This little segment aims to avoid this.
@@ -353,11 +356,11 @@ void Rover::set_servos(void) {
             break;
         }
     }
-
+    //根据output_scaled值计算并保存至output_pwm
     SRV_Channels::calc_pwm();
 
 #if HIL_MODE == HIL_MODE_DISABLED || HIL_SERVOS
-    // send values to the PWM timers for output
+    // send values to the PWM timers for output，非硬件仿真的情况下将output_pwm通过rc->hal实际输出
     // ----------------------------------------
     SRV_Channels::output_ch_all();
 #endif

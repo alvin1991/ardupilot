@@ -478,7 +478,7 @@ bool AP_Arming::arm_checks(uint8_t method)
     if ((checks_to_perform & ARMING_CHECK_ALL) ||
         (checks_to_perform & ARMING_CHECK_LOGGING)) {
         if (!DataFlash_Class::instance()->logging_started()) {
-            GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_CRITICAL, "Arm: Logging not started");
+            GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_CRITICAL, "[Vehical]:Arm: Logging not started");
             return false;
         }
     }
@@ -500,7 +500,7 @@ bool AP_Arming::arm(uint8_t method)
     if (checks_to_perform == ARMING_CHECK_NONE) {
         armed = true;
         arming_method = NONE;
-        GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Throttle armed");
+        GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "[Vehical]:Throttle armed");
         return true;
     }
 
@@ -508,7 +508,7 @@ bool AP_Arming::arm(uint8_t method)
         armed = true;
         arming_method = method;
 
-        GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Throttle armed");
+        GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "[Vehical]:Throttle armed");
 
         //TODO: Log motor arming to the dataflash
         //Can't do this from this class until there is a unified logging library
@@ -534,7 +534,7 @@ bool AP_Arming::disarm()
     }
     armed = false;
 
-    GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "Throttle disarmed");
+    GCS_MAVLINK::send_statustext_all(MAV_SEVERITY_INFO, "[Vehical]:Throttle disarmed");
 
     //TODO: Log motor disarming to the dataflash
     //Can't do this from this class until there is a unified logging library.

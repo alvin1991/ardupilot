@@ -1,6 +1,9 @@
 #include "Rover.h"
 /*
   allow for runtime change of control channel ordering
+ 　初始RC通道设置（油门／舵向／学习）
+ 　 1.设置油门为角度范围[-4500,4500]
+   2.设置舵向为角度范围[-100 ,100 ]
  */
 void Rover::set_control_channels(void)
 {
@@ -8,10 +11,17 @@ void Rover::set_control_channels(void)
     channel_throttle = RC_Channels::rc_channel(rcmap.throttle()-1);
     channel_learn    = RC_Channels::rc_channel(g.learn_channel-1);
 
+    //alvin add direct input rc and set channel range
+    channel_x    = RC_Channels::rc_channel(rcmap.roll()-1);
+    channel_y    = RC_Channels::rc_channel(rcmap.pitch()-1);
+    channel_x->set_angle(SERVO_MAX);
+    channel_y->set_angle(SERVO_MAX);
+
     // set rc channel ranges
     channel_steer->set_angle(SERVO_MAX);
     channel_throttle->set_angle(100);
 
+    //set srv channnel ranges
     SRV_Channels::set_angle(SRV_Channel::k_steering, SERVO_MAX);
     SRV_Channels::set_angle(SRV_Channel::k_throttle, 100);
 
@@ -138,6 +148,7 @@ void Rover::read_radio()
 
     failsafe.last_valid_rc_ms = AP_HAL::millis();
 
+    //获取所有RC通道,并根据初始设定的方式[angle/range]按设置范围归一化保存至control_in中
     RC_Channels::set_pwm_all();
 
     control_failsafe(channel_throttle->get_radio_in());

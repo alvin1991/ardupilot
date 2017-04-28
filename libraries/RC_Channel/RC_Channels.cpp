@@ -117,6 +117,7 @@ RC_Channels::RC_Channels(void)
 
 /*
   call read() and set_pwm() on all channels
+  直接读取hal.rcin的值按range/angle转换并保存至control_in中
  */
 void
 RC_Channels::set_pwm_all(void)

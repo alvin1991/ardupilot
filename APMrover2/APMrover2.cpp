@@ -30,7 +30,7 @@
 */
 
 #include "Rover.h"
-//#include <systemlib/err.h>
+#include <systemlib/err.h>
 const AP_HAL::HAL& hal = AP_HAL::get_HAL();
 
 Rover rover;
@@ -47,7 +47,7 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK(ahrs_update,            50,   6400),
     SCHED_TASK(read_sonars,            50,   2000),
     SCHED_TASK(update_current_mode,    50,   1500),//更新当前模式
-    SCHED_TASK(set_servos,             50,   1500),
+    SCHED_TASK(set_servos,             50,   1500),//全部PWM输出
     SCHED_TASK(update_GPS_50Hz,        50,   2500),//更新GPS状态
     SCHED_TASK(update_GPS_10Hz,        10,   2500),
     SCHED_TASK(update_alt,             10,   3400),
@@ -70,7 +70,7 @@ const AP_Scheduler::Task Rover::scheduler_tasks[] = {
     SCHED_TASK(gcs_failsafe_check,     10,    600),
     SCHED_TASK(compass_accumulate,     50,    900),
     SCHED_TASK(update_notify,          50,    300),
-    SCHED_TASK(one_second_loop,         1,   3000),
+    SCHED_TASK(one_second_loop,         1,   3000),//1Hz
     SCHED_TASK(compass_cal_update,     50,    100),
     SCHED_TASK(accel_cal_update,       10,    100),
     SCHED_TASK(dataflash_periodic,     50,    300),
@@ -360,9 +360,14 @@ void Rover::one_second_loop(void)
     // indicates that the sensor or subsystem is present but not
     // functioning correctly
     update_sensor_status_flags();
-
-//    warnx("steer   : %d",channel_steer->get_control_in());
-//    warnx("throttle: %d",channel_throttle->get_control_in());
+//    warnx("max:  %d	min: %d	 trim: %d	 pwm: %d",
+//		SRV_Channels::get_servo_val(0,2),
+//		SRV_Channels::get_servo_val(0,1),
+//		SRV_Channels::get_servo_val(0,0),
+//		SRV_Channels::get_servo_val(0,3));
+    //warnx("steer    ctrl: %4d radio:%4d",channel_steer->,channel_steer->get_radio_in());
+    //warnx("throttle ctrl: %4d radio:%4d",channel_throttle->get_control_in(),channel_throttle->get_radio_in());
+//    warnx("X:%4d  Y:%4d  A:%6.2f",channel_x->get_control_in(),channel_y->get_control_in(),steer_angle);
 }
 
 void Rover::dataflash_periodic(void)
@@ -496,7 +501,7 @@ void Rover::update_current_mode(void)
           turn from half the STEER2SRV_P.
          */
     	//计算出最大的横向向心加速度
-        float max_g_force = ground_speed * ground_speed / steerController.get_turn_radius();
+        /*float max_g_force = ground_speed * ground_speed / steerController.get_turn_radius();
 
         // constrain to user set TURN_MAX_G
         //将计算出来的横向向心加速度约束到用户设置到的最大加速度值范围[0,g.turn_max_g]
@@ -519,7 +524,9 @@ void Rover::update_current_mode(void)
             target_speed = constrain_float(target_speed, 0, g.speed_cruise);
         }
         //电机控制将期望速度（油门杆和巡航速度）与地速闭环
-        calc_throttle(target_speed);
+        calc_throttle(target_speed);*/
+    	mag_control();
+    	calc_nav_steer();
         break;
     }
     /*
@@ -531,14 +538,10 @@ void Rover::update_current_mode(void)
           in both MANUAL and LEARNING we pass through the
           controls. Setting servo_out here actually doesn't matter, as
           we set the exact value in set_servos(), but it helps for
-          logging
+          logging设置output_scaled的值
          */
         SRV_Channels::set_output_scaled(SRV_Channel::k_throttle,channel_throttle->get_control_in());
         SRV_Channels::set_output_scaled(SRV_Channel::k_steering,channel_steer->get_control_in());
-
-        // mark us as in_reverse when using a negative throttle to
-        // stop AHRS getting off
-        set_reverse(SRV_Channels::get_output_scaled(SRV_Channel::k_throttle) < 0);
         break;
 
     case HOLD:
@@ -600,6 +603,38 @@ void Rover::update_navigation()
         }
         break;
     }
+}
+
+/*航向闭环*/
+void Rover::mag_control(void)
+{
+	//1.throttle control directly
+	SRV_Channels::set_output_scaled(SRV_Channel::k_throttle,channel_throttle->get_control_in());
+
+	//2.get angle speed from RC and constrain it
+	steer_angle_rate = (float)(constrain_int16(channel_steer->get_control_in(), -4500, 4500));
+	double dir_x = (double)(constrain_int16(channel_x->get_control_in(), -4500, 4500));
+	double dir_y = (double)(constrain_int16(channel_y->get_control_in(), -4500, 4500));
+
+	if(channel_x->get_control_in() == 0){
+			dir_x = 0.0000001f;
+	}
+	steer_angle = (float)ToDeg(atan(dir_y/dir_x));
+
+	//3.calc direct
+	if(channel_x->get_control_in() >= 0){
+		if(channel_y->get_control_in() > 0){
+			steer_angle += 90.0f;//1象限
+		}else{
+			steer_angle += 90.0f;//4象限
+		}
+	}else{
+		if(channel_y->get_control_in() > 0){
+			steer_angle += 270.0f;//2象限
+		}else{
+			steer_angle += 270.0f;//3象限
+		}
+	}
 }
 
 AP_HAL_MAIN_CALLBACKS(&rover);

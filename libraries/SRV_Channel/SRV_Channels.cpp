@@ -157,3 +157,28 @@ void SRV_Channels::calc_pwm(void)
         channels[i].calc_pwm(functions[channels[i].function].output_scaled);
     }
 }
+
+/*
+  run calc_pwm for all channels
+ */
+int16_t SRV_Channels::get_servo_val(int ch,char type)
+{
+	switch(type){
+	case 1:
+		return channels[ch].servo_min.get();
+		break;
+	case 2:
+		return channels[ch].servo_max.get();
+		break;
+
+	case 3:
+		return channels[ch].output_pwm;
+		break;
+
+	default:
+		return channels[ch].servo_trim.get();
+		break;
+	}
+
+}
+

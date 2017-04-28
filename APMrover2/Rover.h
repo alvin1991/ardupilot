@@ -132,6 +132,8 @@ private:
     RC_Channel *channel_steer;
     RC_Channel *channel_throttle;
     RC_Channel *channel_learn;
+    RC_Channel *channel_x;
+    RC_Channel *channel_y;
 
     DataFlash_Class DataFlash;
 
@@ -308,6 +310,9 @@ private:
     // Navigation control variables
     // The instantaneous desired lateral acceleration in m/s/s
     float lateral_acceleration;
+
+    float steer_angle_rate;
+    float steer_angle;
 
     // Waypoint distances
     // Distance between rover and next waypoint.  Meters
@@ -562,6 +567,7 @@ private:
     void set_loiter_active(const AP_Mission::Mission_Command& cmd);
     void Log_Write_GuidedTarget(uint8_t target_type, const Vector3f& pos_target, const Vector3f& vel_target);
     void crash_check();
+    void mag_control();//alvin add
 #if ADVANCED_FAILSAFE == ENABLED
     void afs_fs_check(void);
 #endif

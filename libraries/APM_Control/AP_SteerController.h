@@ -13,6 +13,16 @@ public:
 		AP_Param::setup_object_defaults(this, var_info);
 	}
 
+	/*
+	 *根据AHRS．yaw角速率与期望角速率闭环
+	 */
+	int32_t get_steering_out_angle_rate(float desired_angle_rate);
+
+	/*
+	 *根据AHRS．yaw与期望角度闭环
+	 */
+	int32_t get_steering_out_angle(float desired_angle);
+
     /*
       return a steering servo output from -4500 to 4500 given a
       desired lateral acceleration rate in m/s/s. Positive lateral

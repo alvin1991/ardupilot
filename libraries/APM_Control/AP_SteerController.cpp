@@ -19,6 +19,7 @@
 
 #include <AP_Math/AP_Math.h>
 #include <AP_HAL/AP_HAL.h>
+#include <systemlib/err.h>
 #include "AP_SteerController.h"
 
 extern const AP_HAL::HAL& hal;
@@ -114,6 +115,164 @@ const AP_Param::GroupInfo AP_SteerController::var_info[] = {
 	AP_GROUPEND
 };
 
+/*
+ *根据AHRS．yaw角速率与期望角速率进行闭环
+ */
+int32_t AP_SteerController::get_steering_out_angle_rate(float desired_rate)
+{
+	//计算积分时间，并更新时间点
+	uint32_t tnow = AP_HAL::millis();
+	uint32_t dt = tnow - _last_t;
+	if (_last_t == 0 || dt > 1000) {
+		dt = 0;
+	}
+	_last_t = tnow;
+
+	//期望角速率
+	_pid_info.desired = desired_rate;
+
+	// Calculate the steering rate error (deg/sec) and apply gain scaler
+	// We do this in earth frame to allow for rover leaning over in hard corners
+	//计算航向角速率，并计算出偏差
+	float yaw_rate_earth = ToDeg(_ahrs.get_yaw_rate_earth());
+	if (_reverse) {
+		yaw_rate_earth = wrap_180(180 + yaw_rate_earth);
+	}
+	float rate_error = yaw_rate_earth - desired_rate;
+
+	// Calculate equivalent gains so that values for K_P and K_I can be taken across from the old PID law
+	// No conversion is required for K_D
+	float ki_rate = _K_I * _tau * 45.0f;
+	float kp_ff = MAX((_K_P - _K_I * _tau) * _tau  - _K_D , 0) * 45.0f;
+	float k_ff = _K_FF * 45.0f;
+	float delta_time    = (float)dt * 0.001f;
+
+	// Multiply yaw rate error by _ki_rate and integrate
+	// Don't integrate if in stabilize mode as the integrator will wind up against the pilots inputs
+	if (ki_rate > 0) {
+		// only integrate if gain and time step are positive.
+		if (dt > 0) {
+			float integrator_delta = rate_error * ki_rate * delta_time;
+			// prevent the integrator from increasing if steering defln demand is above the upper limit
+			if (_last_out < -45.0f) {
+				integrator_delta = MAX(integrator_delta , 0);
+			} else if (_last_out > 45.0f) {
+				// prevent the integrator from decreasing if steering defln demand is below the lower limit
+				integrator_delta = MIN(integrator_delta, 0);
+			}
+			_pid_info.I += integrator_delta;
+		}
+	} else {
+		_pid_info.I = 0;
+	}
+
+	// Scale the integration limit
+	float intLimScaled = _imax * 0.01f;
+
+	// Constrain the integrator state
+	_pid_info.I  = constrain_float(_pid_info.I, -intLimScaled, intLimScaled);
+
+	_pid_info.D  = rate_error * _K_D * 400.0f;
+	_pid_info.P  = desired_rate * kp_ff;
+	_pid_info.FF = ToRad(desired_rate) * k_ff;
+
+	// Calculate the demanded control surface deflection
+	_last_out = _pid_info.D  + _pid_info.P + _pid_info.I;//+ _pid_info.FF
+
+	// Convert to centi-degrees and constrain
+
+//	warnx("[_tau]: %4.2f [KP]: %4.2f [KI]: %4.2f　[desr]: %4.2f  [curr]: %4.2f ",
+//			_tau.get(),         kp_ff,	   ki_rate,	  desired_rate,	 yaw_rate_earth);
+ 	warnx("[info.OUT]: %4.2f [info.P]: %4.2f [info.I]:%4.2f [info.D]: %4.2f　[info.E]: %4.2f",
+				_last_out,		 _pid_info.P,	 _pid_info.I,	 _pid_info.D,	rate_error);
+
+	return  _last_out;
+	//return constrain_float(_last_out * 100, g.throttle_min.get(), derate_constraint);
+}
+
+/*
+ *根据AHRS．yaw角度与期望角度进行闭环
+ */
+int32_t AP_SteerController::get_steering_out_angle(float desired_angle)
+{
+	//计算积分时间，并更新时间点
+	uint32_t tnow = AP_HAL::millis();
+	uint32_t dt = tnow - _last_t;
+	if (_last_t == 0 || dt > 1000) {
+		dt = 0;
+	}
+	_last_t = tnow;
+
+	//期望角度
+	_pid_info.desired = desired_angle;
+
+	// Calculate the steering rate error (deg/sec) and apply gain scaler
+	// We do this in earth frame to allow for rover leaning over in hard corners
+	//计算航向角速率，并计算出偏差
+	float yaw_angle_earth = ToDeg(_ahrs.yaw);
+	if(yaw_angle_earth < 0){
+		yaw_angle_earth += 360;
+	}
+
+	//期望角度超过pi则补偿，否则直接输出
+	float rate_error = desired_angle - yaw_angle_earth;
+	if (rate_error  > 180.0f){
+		rate_error -= 360;
+	}else if(rate_error  < -180.0f){
+		rate_error += 360;
+	}
+
+	// Calculate equivalent gains so that values for K_P and K_I can be taken across from the old PID law
+	// No conversion is required for K_D
+	float ki_rate = _K_I * _tau * 45.0f;
+	float kp_ff = MAX((_K_P - _K_I * _tau) * _tau  - _K_D , 0) * 45.0f;
+	float k_ff = _K_FF * 45.0f;
+	float delta_time    = (float)dt * 0.001f;
+
+	// Multiply yaw rate error by _ki_rate and integrate
+	// Don't integrate if in stabilize mode as the integrator will wind up against the pilots inputs
+	if (ki_rate > 0) {
+		// only integrate if gain and time step are positive.
+		if (dt > 0) {
+			float integrator_delta = rate_error * ki_rate * delta_time;
+			// prevent the integrator from increasing if steering defln demand is above the upper limit
+			if (_last_out < -45.0f) {
+				integrator_delta = MAX(integrator_delta , 0);
+			} else if (_last_out > 45.0f) {
+				// prevent the integrator from decreasing if steering defln demand is below the lower limit
+				integrator_delta = MIN(integrator_delta, 0);
+			}
+			_pid_info.I += integrator_delta;
+		}
+	} else {
+		_pid_info.I = 0;
+	}
+
+	// Scale the integration limit
+	float intLimScaled = _imax * 0.01f;
+
+	// Constrain the integrator state
+	_pid_info.I  = constrain_float(_pid_info.I, -intLimScaled, intLimScaled);
+
+	_pid_info.D  = rate_error * _K_D * 4000.0f;
+	_pid_info.P  = desired_angle * kp_ff;
+	_pid_info.FF = desired_angle * k_ff;
+
+	// Calculate the demanded control surface deflection
+	_last_out = _pid_info.D  + _pid_info.I;//+ _pid_info.FF + _pid_info.P
+
+	// Convert to centi-degrees and constrain
+
+//	warnx("[_tau]: %4.2f [KP]: %4.2f [KI]: %4.2f　[desr]: %4.2f  [curr]: %4.2f ",
+//			_tau.get(),         kp_ff,	   ki_rate,	  desired_rate,	 yaw_rate_earth);
+// 	warnx("[info.OUT]: %4.2f [info.P]: %4.2f [info.I]:%4.2f [info.D]: %4.2f　[info.E]: %4.2f",
+//				_last_out,		 _pid_info.P,	 _pid_info.I,	 _pid_info.D,	rate_error);
+// 	warnx("[roll]: %4.2f  [pitch]: %4.2f  [yaw]: %4.2f",ToDeg(_ahrs.roll),ToDeg(_ahrs.pitch),yaw_angle_earth);
+	warnx("[Desired]: %.2f  [Current]: %.2f  [Error]: %.2f  [Out]: %.2f",desired_angle,yaw_angle_earth,rate_error,_last_out);
+
+	return  -_last_out;
+	//return constrain_float(_last_out * 100, g.throttle_min.get(), derate_constraint);
+}
 
 /*
   steering rate controller. Returns servo out -4500 to 4500 given
@@ -122,6 +281,7 @@ const AP_Param::GroupInfo AP_SteerController::var_info[] = {
 */
 int32_t AP_SteerController::get_steering_out_rate(float desired_rate)
 {
+	//计算积分时间，并更新时间点
 	uint32_t tnow = AP_HAL::millis();
 	uint32_t dt = tnow - _last_t;
 	if (_last_t == 0 || dt > 1000) {
@@ -129,6 +289,7 @@ int32_t AP_SteerController::get_steering_out_rate(float desired_rate)
 	}
 	_last_t = tnow;
 
+	//获取地速度
     float speed = _ahrs.groundspeed();
     if (speed < _minspeed) {
         // assume a minimum speed. This stops oscillations when first starting to move
@@ -143,6 +304,7 @@ int32_t AP_SteerController::get_steering_out_rate(float desired_rate)
 
 	// Calculate the steering rate error (deg/sec) and apply gain scaler
     // We do this in earth frame to allow for rover leaning over in hard corners
+    //计算航向角速率，并计算出偏差
     float yaw_rate_earth = ToDeg(_ahrs.get_yaw_rate_earth());
     if (_reverse) {
         yaw_rate_earth = wrap_180(180 + yaw_rate_earth);

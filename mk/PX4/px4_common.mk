@@ -23,6 +23,7 @@ MODULES		+= drivers/px4fmu
 #MODULES	+= drivers/blinkm
 #MODULES	+= modules/sensors
 MODULES		+= drivers/mkblctrl
+MODULES		+= drivers/XSensMTi1
 
 #
 # System commands

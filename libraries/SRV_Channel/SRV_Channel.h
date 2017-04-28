@@ -343,7 +343,7 @@ public:
     
     // calculate PWM for all channels
     static void calc_pwm(void);
-
+    static int16_t get_servo_val(int ch,char type);
     static SRV_Channel *srv_channel(uint8_t i) {
         return i<NUM_SERVO_CHANNELS?&channels[i]:nullptr;
     }
